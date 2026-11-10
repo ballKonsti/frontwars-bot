@@ -26,6 +26,7 @@ add_library(fw_core
   src/learn/mlp.cpp
   src/learn/model.cpp
   src/learn/episodes.cpp
+  src/learn/advice.cpp
   src/learn/trainer.cpp
   src/learn/learner.cpp)
 target_include_directories(fw_core PUBLIC src)

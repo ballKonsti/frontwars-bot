@@ -8,6 +8,7 @@
 #include <nlohmann/json.hpp>
 
 #include "config.h"
+#include "learn/advice.h"
 #include "learn/episodes.h"
 #include "learn/mlp.h"
 #include "learn/model.h"
@@ -28,6 +29,9 @@ struct Option {
     bool rulePick = false;
     bool sane = false;      // troop options: a move that is fine to force when troops are full
     bool reckless = false;  // never picked by exploration
+    std::string kind;       // wait / expand / attack / boat, or the gold option's name (what advice matches on)
+    int targetSmall = 0;    // small ID of the player it is aimed at, if any
+    double bonus = 0;       // extra score from research advice
 };
 
 // What the networks see of a state: our own features and one row per visible player.
@@ -62,7 +66,8 @@ struct Brain {
 // from them and publishes new weights, which are picked up while the game runs.
 class Learner {
 public:
-    Learner(const Config& cfg, std::string modelDir, uint32_t seed = 7);
+    // adviceFile: research advice to follow (see learn/advice.h); empty = none.
+    Learner(const Config& cfg, std::string modelDir, uint32_t seed = 7, std::string adviceFile = "");
     ~Learner();
 
     void load();
@@ -79,8 +84,7 @@ public:
     double priorWeight(int net) const;
     int reloads() const { return reloads_; }
     Brain& brain() { return brain_; }
-    // Extra score per option from outside the nets (research advice). Net: kTroop / kGold / kSpawn.
-    void setAdvice(std::function<double(int, const Option&)> fn) { advice_ = std::move(fn); }
+    size_t adviceItems() const { return advice_.size(); }
 
     // Exposed for tests.
     Features features(const State& s, bool overextended) const;
@@ -99,13 +103,16 @@ private:
     void record(int net, const Features& ft, const Option& pick, const State& s);
     void snapshot(const State& s, double out[kSnap]) const;
     void reloadIfNewer();
+    void applyAdvice(const State& s, int net, std::vector<Option>& opts) const;
 
     const Config& cfg_;
     const LearningConfig& lc_;
     std::string dir_;
     Brain brain_;
     EpisodeWriter writer_;
-    std::function<double(int, const Option&)> advice_;
+    Advice advice_;            // research advice (advice.json next to the config), reloaded when it changes
+    std::string advicePath_;
+    long long adviceTime_ = 0;
     State lastState_;
     int lastTick_ = -1;
     double lastGold_ = -1, earned_ = 0, income_ = 0;  // gold earned so far, and per tick (smoothed)

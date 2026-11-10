@@ -29,11 +29,14 @@ int main(int argc, char** argv) {
     if (cfg.learning.enabled) {
         std::filesystem::path dir = cfg.learning.modelDir;
         if (dir.is_relative()) dir = configDir / dir;
-        learner = std::make_unique<fw::Learner>(cfg, dir.string(), std::random_device{}());
+        std::filesystem::path advice = cfg.learning.adviceFile;
+        if (!advice.empty() && advice.is_relative()) advice = configDir / advice;
+        learner = std::make_unique<fw::Learner>(cfg, dir.string(), std::random_device{}(), advice.string());
         learner->load();
         std::cerr << "learner: " << learner->brain().seen << " decisions of experience, "
                   << learner->brain().members[0].parameters() << " weights x " << learner->brain().members.size()
-                  << " (" << cfg.learning.size << ") in " << learner->brain().dir << "\n";
+                  << " (" << cfg.learning.size << ") in " << learner->brain().dir << "; " << learner->adviceItems()
+                  << " advice items\n";
     }
     fw::Memory mem;
     std::string line;

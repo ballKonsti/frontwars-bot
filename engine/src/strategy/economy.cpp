@@ -63,11 +63,15 @@ void economyModule(Ctx& c) {
     if (factories < factoryCap && tryBuild("Factory", cost("Factory", cfg.factoryCost, factories), "interior")) return;
 
     // Standing posts on the most contested border, not just when attacked.
-    if (cfg.citiesPerPost > 0 && posts < cities / cfg.citiesPerPost) {
+    // ...and one more as soon as a nation stronger than us is on the border.
+    if (cfg.citiesPerPost > 0) {
         const Player* front = nullptr;
         for (const auto& p : s.players)
             if (p.border > 0 && !p.friendly && (!front || p.troops > front->troops)) front = &p;
-        if (front && tryBuild("Defense Post", postCost, "border", front->small)) return;
+        const bool outgunned = front && !front->isBot() && front->troops > s.me.troops;
+        if (front && posts < cities / cfg.citiesPerPost + (outgunned ? 1 : 0) &&
+            tryBuild("Defense Post", postCost, "border", front->small))
+            return;
     }
 
     // Ports go to the far ends of our coast: longer trade routes pay more.

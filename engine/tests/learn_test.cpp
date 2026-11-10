@@ -4,6 +4,7 @@
 #include <cmath>
 #include <thread>
 #include <filesystem>
+#include <fstream>
 #include <random>
 
 #include "config.h"
@@ -352,6 +353,41 @@ TEST(Learner, NoWaitingOnFullTroops) {
     for (const auto& o : full) EXPECT_FALSE(o.action.is_null()) << o.label;
     auto half = learner.troopOptions(fw::parseState(learnState(1000, 500, 50000)), plan, false);
     EXPECT_TRUE(half[0].action.is_null());
+}
+
+TEST(Learner, FollowsResearchAdvice) {
+    auto cfg = quietConfig();
+    auto dir = tempDir("advice");
+    std::filesystem::create_directories(dir);
+    const std::string file = dir + "/advice.json";
+    auto write = [&](const json& items) { std::ofstream(file) << json{{"items", items}}.dump(); };
+    json boat = {{"id", "a1"}, {"strength", 1.0}, {"when", {{"phase", "early"}, {"neutralLand", true}}},
+                 {"prefer", {{"decision", "troop"}, {"kind", "expand"}, {"ratioMax", 0.1}}}};
+    json typo = {{"id", "a2"}, {"prefer", {{"decision", "troop"}, {"kind", "charge"}}}};
+    json off = boat;
+    off["id"] = "a3", off["enabled"] = false, off["prefer"]["kind"] = "wait";
+    write(json::array({boat, typo, off}));
+
+    std::vector<std::string> errors;
+    auto advice = fw::Advice::load(file, &errors);
+    EXPECT_EQ(advice.size(), 1u);  // the typo is rejected, the disabled item skipped
+    ASSERT_EQ(errors.size(), 1u);
+    EXPECT_NE(errors[0].find("charge"), std::string::npos);
+
+    cfg.learning.adviceWeight = 5;  // outweighs the rules' bonus
+    fw::Learner learner(cfg, dir, 7, file);
+    learner.load();
+    fw::Memory mem;
+    auto plan = fw::decide(fw::parseState(learnState(1000, 500, 50000)), cfg, mem, &learner);
+    bool small = false;
+    for (const auto& a : plan.actions)
+        small |= a["type"] == "attack" && a["target"].is_null() && std::fabs(a["troops"].get<double>() - 5000) < 1;
+    EXPECT_TRUE(small);  // the rules would send 20%; the advice asked for a 10% push into free land
+    // Outside the advice's condition (mid game) nothing changes.
+    fw::Memory mem2;
+    plan = fw::decide(fw::parseState(learnState(5000, 500, 50000)), cfg, mem2, &learner);
+    for (const auto& a : plan.actions)
+        if (a["type"] == "attack" && a["target"].is_null()) EXPECT_GT(a["troops"].get<double>(), 5001);
 }
 
 TEST(Learner, EvalGamesRecordNothing) {

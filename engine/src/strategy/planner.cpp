@@ -8,7 +8,11 @@ namespace fw {
 
 double homeReserve(const State& s, const Config& cfg) {
     const auto& m = cfg.military;
-    return std::max(m.reserveFrac * s.me.maxTroops, m.incomingReserve * s.me.incomingTroops());
+    double strongest = 0;
+    for (const auto& p : s.players)
+        if (p.border > 0 && !p.allied && !p.friendly && !p.isBot()) strongest = std::max(strongest, p.troops);
+    const double threat = std::min(m.threatReserve * strongest, m.maxReserveFrac * s.me.maxTroops);
+    return std::max({m.reserveFrac * s.me.maxTroops, m.incomingReserve * s.me.incomingTroops(), threat});
 }
 
 bool overextended(const State& s, const SustainConfig& cfg, Memory& mem) {

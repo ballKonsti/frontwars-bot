@@ -11,7 +11,8 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(SpawnConfig, edgeWeight, reconsi
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(SustainConfig, window, maxDrop)
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(ExpandConfig, ratio, minTroopFrac, cooldown)
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(MilitaryConfig, ratio, minTroopFrac, advantage, botAdvantage, minGainTiles,
-                                                distractedBonus, finishBonus, reserveFrac, incomingReserve, maxConcurrent, cooldown)
+                                                distractedBonus, finishBonus, reserveFrac, incomingReserve, threatReserve,
+                                                maxReserveFrac, maxConcurrent, cooldown)
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(EconomyConfig, cityCost, factoryCost, portCost, postCost, warshipCost,
                                                 costGrowth, openingFactories, tilesPerCity, citiesPerFactory,
                                                 citiesPerPost, portsPerCity, maxWarships, goldReserve, cooldown)
@@ -24,7 +25,8 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(DiplomacyConfig, enabled, accept
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(StrategicConfig, enabled, siloCost, samCost, atomCost, hydrogenCost,
                                                 minTilesForSilo, minCitiesForSilo, citiesPerSilo, maxSilos, citiesPerSam, firstStrike, leaderShare,
                                                 mountainWeight, nukeCooldown, cooldown)
-NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(LearningConfig, enabled, modelDir, size, weightDecay, ensemble, caution, record, explore,
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(LearningConfig, enabled, modelDir, size, weightDecay, ensemble, caution, adviceFile, adviceWeight, record,
+                                                explore,
                                                 studyHorizon, lr, batch, replay, maxEpisodes,
                                                 horizon, wLand, wGold, wTroops, wCap, terminalWin,
                                                 terminalLoss, terminalShare, epsilon, epsilonDecay, temperature, prior, priorHalfLife,

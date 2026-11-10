@@ -48,13 +48,11 @@ void strategicBuildModule(Ctx& c) {
     const double siloCost = s.cost("Missile Silo", cfg.siloCost);
     const double samCost = s.cost("SAM Launcher", cfg.samCost);
 
-    if (silos == 0 && s.me.tiles >= cfg.minTilesForSilo && cities >= cfg.minCitiesForSilo) {
-        if (c.plan.spend(siloCost)) {
-            c.mem.mark("strategic", s.tick);
-            buildHigh(c, "Missile Silo");
-        } else {
-            c.plan.goldBudget = 0;  // save up instead of buying cities
-        }
+    // The first silo is bought when the gold is there. Saving up for it instead of building cities and
+    // posts left hundreds of thousands idle while neighbours overran us.
+    if (silos == 0 && s.me.tiles >= cfg.minTilesForSilo && cities >= cfg.minCitiesForSilo && c.plan.spend(siloCost)) {
+        c.mem.mark("strategic", s.tick);
+        buildHigh(c, "Missile Silo");
         return;
     }
     int samCap = 1 + cities / std::max(1, cfg.citiesPerSam);

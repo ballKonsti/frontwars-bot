@@ -8,7 +8,7 @@
   "expand":    { "ratio": 0.20, "minTroopFrac": 0.05, "cooldown": 5 },
   "military":  { "ratio": 0.20, "minTroopFrac": 0.20, "advantage": 2.0, "botAdvantage": 0.6,
                  "minGainTiles": 80, "distractedBonus": 1.5, "finishBonus": 2.0, "reserveFrac": 0.10,
-                 "incomingReserve": 1.1, "maxConcurrent": 3, "cooldown": 10 },
+                 "incomingReserve": 1.1, "threatReserve": 0.6, "maxReserveFrac": 0.5, "maxConcurrent": 3, "cooldown": 10 },
   // Real costs come from the game; the *Cost values in src/config.h are only fallbacks.
   "economy":   { "costGrowth": 1.0, "openingFactories": 2, "tilesPerCity": 250, "citiesPerFactory": 2,
                  "citiesPerPost": 3, "portsPerCity": 3, "maxWarships": 3, "goldReserve": 0, "cooldown": 20 },

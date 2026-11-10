@@ -236,28 +236,46 @@ Features Learner::features(const State& s, bool overextended) const {
     return ft;
 }
 
-Learner::Learner(const Config& cfg, std::string modelDir, uint32_t seed)
-    : cfg_(cfg), lc_(cfg.learning), dir_(std::move(modelDir)), brain_(cfg.learning, dir_, seed), rng_(seed) {}
+Learner::Learner(const Config& cfg, std::string modelDir, uint32_t seed, std::string adviceFile)
+    : cfg_(cfg), lc_(cfg.learning), dir_(std::move(modelDir)), brain_(cfg.learning, dir_, seed),
+      advicePath_(std::move(adviceFile)), rng_(seed) {}
 
 Learner::~Learner() = default;
 
 void Learner::load() {
     brain_.load();
+    reloadIfNewer();
     namespace fs = std::filesystem;
     std::error_code ec;
     statusTime_ = fs::last_write_time(fs::path(brain_.dir) / "status.json", ec).time_since_epoch().count();
 }
 
-// The trainer publishes new weights every few seconds; pick them up while we play.
+// The trainer publishes new weights every few seconds, and advice can change in the GUI: pick both up
+// while we play.
 void Learner::reloadIfNewer() {
     namespace fs = std::filesystem;
     std::error_code ec;
     auto t = fs::last_write_time(fs::path(brain_.dir) / "status.json", ec).time_since_epoch().count();
-    if (ec || t == statusTime_) return;
-    if (brain_.load()) {
+    if (!ec && t != statusTime_ && brain_.load()) {
         statusTime_ = t;
         ++reloads_;
     }
+    if (advicePath_.empty()) return;
+    auto a = fs::last_write_time(advicePath_, ec).time_since_epoch().count();
+    if (ec) {
+        if (adviceTime_) advice_ = Advice{};  // the file was removed
+        adviceTime_ = 0;
+    } else if (a != adviceTime_) {
+        adviceTime_ = a;
+        advice_ = Advice::load(advicePath_);
+    }
+}
+
+void Learner::applyAdvice(const State& s, int net, std::vector<Option>& opts) const {
+    if (advice_.empty()) return;
+    for (auto& o : opts)
+        o.bonus = advice_.bonus(s, net, {o.kind, o.ratio, o.targetSmall ? s.player(o.targetSmall) : nullptr},
+                                lc_.adviceWeight);
 }
 
 // ---------------------------------------------------------------- options
@@ -271,7 +289,8 @@ std::vector<Option> Learner::troopOptions(const State& s, const Plan& plan, bool
     auto make = [&](const char* kind, double ratio, const Player* p, const BoatTarget* b) {
         Option o;
         o.x.reserve(kTroopOptionFeatures);
-        if (p) o.target = ft.index(p->small);
+        o.kind = kind;
+        if (p) o.target = ft.index(p->small), o.targetSmall = p->small;
         for (const char* k : {"wait", "expand", "attack", "boat"}) o.x.push_back(std::strcmp(k, kind) == 0);
         o.x.push_back(float(ratio));
         const double sent = ratio * m.troops;
@@ -384,7 +403,8 @@ std::vector<Option> Learner::goldOptions(const State& s, const Plan& plan) const
     auto add = [&](int kind, double cost, int owned, nlohmann::json action, int near = 0) {
         if (kind != 0 && cost > plan.goldBudget) return;
         Option o;
-        if (near) o.target = ft.index(near);
+        o.kind = kGoldKinds[kind];
+        if (near) o.target = ft.index(near), o.targetSmall = near;
         for (int k = 0; k < kNumGoldKinds; ++k) o.x.push_back(k == kind);
         o.x.push_back(clampf(cost / (m.gold + 1.0), 0, 1));
         o.x.push_back(clampf(owned / 10.0, 0, 2));
@@ -482,7 +502,7 @@ const Option& Learner::choose(int net, const Features& ft, std::vector<Option>& 
         // Members that disagree don't know yet: an unfamiliar move is marked down by their spread,
         // while the rules' move keeps its bonus. So the nets overrule the rules only when they agree.
         v[i] = opts[i].rulePick ? mean[i] + prior : mean[i] - lc_.caution * sd[i];
-        if (advice_) v[i] += advice_(net, opts[i]);
+        v[i] += opts[i].bonus;
         if (v[i] > v[best]) best = i;
     }
     // Exploration samples by score, so clearly bad moves stay rare even while exploring.
@@ -552,6 +572,7 @@ void Learner::troopPhase(Ctx& c) {
     }
 
     const Features ft = features(s, c.plan.overextended);
+    applyAdvice(s, kTroop, opts);
     const Option& pick = choose(kTroop, ft, opts);
     record(kTroop, ft, pick, s);
     if (pick.action.is_null()) return;
@@ -560,7 +581,8 @@ void Learner::troopPhase(Ctx& c) {
     auto a = pick.action;
     a["troops"] = troops;
     c.plan.actions.push_back(std::move(a));
-    c.plan.log.push_back("nn: " + pick.label + " (" + fmt(lastPick_) + ", rule: " + ruleLabel + ")");
+    c.plan.log.push_back("nn: " + pick.label + " (" + fmt(lastPick_) + ", rule: " + ruleLabel +
+                         (pick.bonus != 0 ? ", advice " + fmt(pick.bonus) : "") + ")");
 }
 
 void Learner::goldPhase(Ctx& c) {
@@ -576,11 +598,13 @@ void Learner::goldPhase(Ctx& c) {
     for (auto& o : opts) o.rulePick = o.label == want;
 
     const Features ft = features(s, c.plan.overextended);
+    applyAdvice(s, kGold, opts);
     const Option& pick = choose(kGold, ft, opts);
     record(kGold, ft, pick, s);
     if (pick.action.is_null() || !c.plan.spend(pick.gold)) return;
     c.plan.actions.push_back(pick.action);
-    c.plan.log.push_back("nn: " + pick.label + " (" + fmt(lastPick_) + ", rule: " + want + ")");
+    c.plan.log.push_back("nn: " + pick.label + " (" + fmt(lastPick_) + ", rule: " + want +
+                         (pick.bonus != 0 ? ", advice " + fmt(pick.bonus) : "") + ")");
 }
 
 

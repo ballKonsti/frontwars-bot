@@ -35,6 +35,11 @@ struct MilitaryConfig {
     double finishBonus = 2.0;         // prefer targets we can wipe out (conquest pays gold)
     double reserveFrac = 0.10;        // always keep this fraction of maxTroops home
     double incomingReserve = 1.1;     // ...or this multiple of troops attacking us, whichever is larger
+    // ...or enough to make a neighbouring nation think twice: this fraction of the strongest
+    // non-allied nation on our border, capped at maxReserveFrac of maxTroops. Nations attack whoever
+    // is thin; running at 20% of the cap next to one is how games were lost.
+    double threatReserve = 0.6;
+    double maxReserveFrac = 0.5;
     int maxConcurrent = 3;
     int cooldown = 10;
 };
@@ -110,6 +115,8 @@ struct LearningConfig {
     double weightDecay = 1e-4;
     int ensemble = 5;               // independent copies of each net; their disagreement = uncertainty
     double caution = 1.0;           // moves the rules wouldn't make are marked down by this * disagreement
+    std::string adviceFile = "advice.json";  // research advice, relative to the config file
+    double adviceWeight = 0.3;      // score added per unit of an advice item's strength
     bool record = true;             // write decisions to episode files and retrain after the game
     bool explore = true;            // false = always play the best-scored move (evaluation games)
     int studyHorizon = 300;         // ticks until the trainer studies a decision of a game still running
