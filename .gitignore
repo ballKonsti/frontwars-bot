@@ -1,0 +1,10 @@
+.profile*/
+logs/
+research/
+engine/build*/
+engine/models/
+engine/.cache/
+engine/config.tuned.json
+engine/advice.json
+bot/node_modules/
+engine/compile_commands.json

@@ -1,0 +1,42 @@
+{
+  // Tuning knobs for fw_engine. Anything left out keeps the default from src/config.h.
+  // Troops are internal units (HUD value x10); cooldowns are ticks (10 ticks ~ 1 s).
+  "spawn":     { "edgeWeight": 1.0, "reconsiderTick": 60 },
+  // Stop new offensives when troops dropped more than maxDrop within `window` ticks while attacking.
+  "sustain":   { "window": 60, "maxDrop": 0.25 },
+  // Strong players send many 20% attacks back to back and let troops run low (docs/video-notes.md).
+  "expand":    { "ratio": 0.20, "minTroopFrac": 0.05, "cooldown": 5 },
+  "military":  { "ratio": 0.20, "minTroopFrac": 0.20, "advantage": 2.0, "botAdvantage": 0.6,
+                 "minGainTiles": 80, "distractedBonus": 1.5, "finishBonus": 2.0, "reserveFrac": 0.10,
+                 "incomingReserve": 1.1, "maxConcurrent": 3, "cooldown": 10 },
+  // Real costs come from the game; the *Cost values in src/config.h are only fallbacks.
+  "economy":   { "costGrowth": 1.0, "openingFactories": 2, "tilesPerCity": 250, "citiesPerFactory": 2,
+                 "citiesPerPost": 3, "portsPerCity": 3, "maxWarships": 3, "goldReserve": 0, "cooldown": 20 },
+  "naval":     { "enabled": true, "ratio": 0.30, "minTroopFrac": 0.40, "maxBoats": 3, "maxNeutralBorder": 40,
+                 "maxTargetTroops": 0.5, "islandTargetTroops": 1.2,
+                 "cooldown": 60 },
+  "diplomacy": { "enabled": true, "acceptIfStrongerFrac": 0.7, "acceptNeighbors": true,
+                 "requestIfStrongerFrac": 1.2, "leaderAllyFrac": 2.0, "embargoEnemies": true,
+                 "allowBetrayal": false, "requestCooldown": 300 },
+  // firstStrike=false: nuke only players who nuked us, or a leader holding more than leaderShare of the land.
+  "strategic": { "enabled": true, "minTilesForSilo": 300, "minCitiesForSilo": 3, "citiesPerSilo": 3, "maxSilos": 12, "citiesPerSam": 2,
+                 "firstStrike": false, "leaderShare": 0.35, "mountainWeight": 1.0,
+                 "nukeCooldown": 80, "cooldown": 40 },
+  // Neural decision layer. Every decision is recorded in <modelDir>/episodes; after each game both nets
+  // are retrained on all recorded games to predict the discounted future gain in position:
+  //   wLand*sqrt(land share) + wGold*log(1 + wealth/100k) + wTroops*troops/max + wCap*log(1 + maxTroops/100k)
+  // plus terminalWin / terminalLoss. horizon (ticks) is how far ahead it looks. prior is the head start
+  // the rule-based choice gets; it halves every priorHalfLife recorded decisions down to priorFloor.
+  // Each net is an ensemble of `ensemble` copies; moves the rules wouldn't make are marked down by
+  // caution * their disagreement. study=true keeps training in the background during the game, adding
+  // this game's own decisions studyHorizon ticks after they were made.
+  // Delete modelDir to start learning from scratch. enabled=false = pure rules.
+  "learning":  { "enabled": true, "modelDir": "models", "hidden": 128, "ensemble": 5, "caution": 0.5,
+                 "study": true, "studyHorizon": 300, "lr": 0.001, "batch": 64,
+                 "replay": 200000, "maxEpisodes": 400, "trainSteps": 3000, "horizon": 1500,
+                 "wLand": 10.0, "wGold": 1.0, "wTroops": 0.5, "wCap": 0.5,
+                 "terminalWin": 10.0, "terminalLoss": -10.0,
+                 "epsilon": 0.15, "epsilonDecay": 0.00005, "temperature": 0.3,
+                 "prior": 1.0, "priorHalfLife": 20000, "priorFloor": 0.1, "fullTroops": 0.9,
+                 "troopCooldown": 10, "goldCooldown": 20 }
+}
