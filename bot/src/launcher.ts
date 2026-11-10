@@ -61,10 +61,28 @@ function registerPopupHandlers(page: Page): void {
 // Those are for the person at the keyboard: we never click them, we just wait while they do.
 const HUMAN_TIMEOUT = 5 * 60_000;
 
-export async function startSinglePlayer(page: Page): Promise<void> {
+export const DIFFICULTIES = ['relaxed', 'balanced', 'intense', 'impossible'] as const;
+export type Difficulty = (typeof DIFFICULTIES)[number];
+export const SPEEDS = ['1', '2', '4', '8', 'max'] as const;
+export type Speed = (typeof SPEEDS)[number];
+
+export async function startSinglePlayer(page: Page, difficulty: Difficulty): Promise<void> {
   console.log('Opening single player. If a consent banner or "Quick check" shows up, handle it in the browser window.');
   await page.getByRole('button', { name: 'Single Player' }).click({ timeout: HUMAN_TIMEOUT });
+  // The dialog remembers the last choice, so always set the difficulty we were asked for.
+  await page.getByText('Rules & Options', { exact: true }).first().click({ timeout: 15_000 });
+  await page.getByRole('button', { name: new RegExp(`^${difficulty}$`, 'i') }).first().click({ timeout: 15_000 });
   await page.getByRole('button', { name: /start game/i }).click({ timeout: HUMAN_TIMEOUT });
+}
+
+// Single player has its own speed control (the "Replay" panel: x0.5 ... x8, Max). Faster games feed the
+// learner more decisions per hour; the bot's reaction time in game ticks gets proportionally slower.
+export async function setSpeed(page: Page, speed: Speed): Promise<void> {
+  if (speed === '1') return;
+  const label = speed === 'max' ? 'Max' : `×${speed}`;
+  const button = page.getByRole('button', { name: label, exact: true });
+  if (!(await button.count())) await page.getByRole('button', { name: 'Replay', exact: true }).click({ timeout: 15_000 });
+  await button.first().click({ timeout: 15_000 });
 }
 
 export async function waitForGame(page: Page, timeoutMs: number): Promise<void> {

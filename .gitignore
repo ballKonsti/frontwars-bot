@@ -8,3 +8,4 @@ engine/config.tuned.json
 engine/advice.json
 bot/node_modules/
 engine/compile_commands.json
+engine/config.eval-*.json

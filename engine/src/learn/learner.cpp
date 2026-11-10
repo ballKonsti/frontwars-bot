@@ -364,7 +364,7 @@ const Option& Learner::choose(int net, std::vector<Option>& opts) {
     }
     lastBest_[net] = mean[best];
     // Exploration samples by score, so clearly bad moves stay rare even while exploring.
-    double eps = lc_.epsilon / (1.0 + n.seen * lc_.epsilonDecay);
+    double eps = lc_.explore ? lc_.epsilon / (1.0 + n.seen * lc_.epsilonDecay) : 0.0;
     if (opts.size() > 1 && std::uniform_real_distribution<double>(0, 1)(rng_) < eps) {
         const double temp = std::max(1e-3, lc_.temperature);
         std::vector<double> w(opts.size());
@@ -513,6 +513,7 @@ void writeSnap(std::FILE* f, const double snap[6]) {
 }  // namespace
 
 void Learner::record(int net, const Option& pick, const State& s) {
+    if (!lc_.record) return;
     if (!episode_) {
         namespace fs = std::filesystem;
         std::error_code ec;
@@ -764,7 +765,7 @@ TrainReport Learner::train(int steps) {
 // refreshed a few times a second, so what happened a minute ago already shapes the next decision.
 
 void Learner::startStudy() {
-    if (studying_ || !lc_.study) return;
+    if (studying_ || !lc_.study || !lc_.record) return;
     stop_ = false;
     studying_ = true;
     study_ = std::thread(&Learner::studyLoop, this);

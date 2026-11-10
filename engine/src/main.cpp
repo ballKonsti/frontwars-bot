@@ -85,7 +85,7 @@ int main(int argc, char** argv) {
         }
         std::cout << out.dump() << '\n' << std::flush;
     }
-    if (learner) {
+    if (learner && cfg.learning.record) {
         trainAndSave(*learner, cfg.learning.trainSteps);
     }
     return 0;

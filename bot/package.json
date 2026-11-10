@@ -4,6 +4,7 @@
   "type": "module",
   "scripts": {
     "bot": "tsx src/main.ts",
+    "report": "tsx src/report.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

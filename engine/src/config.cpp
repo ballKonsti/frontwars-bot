@@ -24,7 +24,7 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(DiplomacyConfig, enabled, accept
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(StrategicConfig, enabled, siloCost, samCost, atomCost, hydrogenCost,
                                                 minTilesForSilo, minCitiesForSilo, citiesPerSilo, maxSilos, citiesPerSam, firstStrike, leaderShare,
                                                 mountainWeight, nukeCooldown, cooldown)
-NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(LearningConfig, enabled, modelDir, hidden, ensemble, caution, study,
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(LearningConfig, enabled, modelDir, hidden, ensemble, caution, study, record, explore,
                                                 studyHorizon, lr, batch, replay, maxEpisodes,
                                                 trainSteps, horizon, wLand, wGold, wTroops, wCap, terminalWin,
                                                 terminalLoss, epsilon, epsilonDecay, temperature, prior, priorHalfLife,

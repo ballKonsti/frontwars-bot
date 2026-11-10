@@ -109,6 +109,8 @@ struct LearningConfig {
     int ensemble = 5;               // independent copies of each net; their disagreement = uncertainty
     double caution = 0.5;           // moves the rules wouldn't make are marked down by this * disagreement
     bool study = true;              // keep training in the background while the game runs
+    bool record = true;             // write decisions to episode files and retrain after the game
+    bool explore = true;            // false = always play the best-scored move (evaluation games)
     int studyHorizon = 300;         // ticks until a decision of the running game is studied
     double lr = 1e-3;
     int batch = 64;
