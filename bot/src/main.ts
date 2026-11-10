@@ -8,7 +8,7 @@ import { DIFFICULTIES, SPEEDS, launch, newGamePage, setSpeed, startSinglePlayer,
 import { Engine } from './engine.js';
 import { Tuner, readConfig, scoreGame, type GameStats } from './tuner.js';
 import { appendFileSync, writeFileSync } from 'node:fs';
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawn as spawnProcess, type ChildProcess } from 'node:child_process';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 
@@ -34,6 +34,8 @@ const { values: args } = parseArgs({
     eval: { type: 'string' },
     // Single-player settings: relaxed | balanced | intense | impossible, and the game's own speed
     // control (1 | 2 | 4 | 8 | max). Start the learner on relaxed; raise speed to feed it faster.
+    // The trainer learns from the recorded games while they are played. --no-trainer: play only.
+    'no-trainer': { type: 'boolean', default: false },
     difficulty: { type: 'string', default: 'balanced' },
     speed: { type: 'string', default: '1' },
   },
@@ -85,7 +87,7 @@ if (evalGames) {
   const base = readConfig(args.config!);
   writeFileSync(evalConfig.rules, JSON.stringify({ ...base, learning: { ...base.learning, enabled: false } }, null, 2));
   writeFileSync(evalConfig.nets, JSON.stringify(
-    { ...base, learning: { ...base.learning, enabled: true, record: false, explore: false, study: false } }, null, 2));
+    { ...base, learning: { ...base.learning, enabled: true, record: false, explore: false } }, null, 2));
 }
 let rev = 'unknown';
 try {
@@ -206,6 +208,17 @@ async function playOne(page: Page, gameNo: number): Promise<void> {
   if (tuner) say(`tuner: ${tuner.report(score)}`);
 }
 
+// One trainer for all games: it reads the episode files as they grow and publishes new weights every
+// few seconds, which the engines pick up mid-game. It stops when its stdin closes, i.e. when we exit.
+let trainer: ChildProcess | null = null;
+const learningOn = readConfig(args.config!).learning?.enabled !== false;
+if (learningOn && !evalGames && !args.tune && !args['no-trainer']) {
+  const bin = path.join(path.dirname(args.engine!), 'fw_trainer');
+  trainer = spawnProcess('nice', ['-n', '10', bin, args.config!], { stdio: ['pipe', 'ignore', 'pipe'] });
+  trainer.stderr!.on('data', (d) => process.stderr.write(String(d).replace(/^(?=.)/gm, '[trainer] ')));
+  trainer.on('error', (e) => console.error(`trainer could not start: ${e.message}`));
+}
+
 const games = evalGames || Number(args.games);
 let nextGame = 1;
 
@@ -228,3 +241,7 @@ const pages = [firstPage];
 for (let i = 1; i < Math.min(parallel, games); i++) pages.push(await newGamePage(context));
 await Promise.all(pages.map(worker));
 await context.close();
+if (trainer) {
+  trainer.stdin!.end();
+  await new Promise((r) => trainer!.on('exit', r));
+}

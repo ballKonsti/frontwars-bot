@@ -22,21 +22,22 @@
   "strategic": { "enabled": true, "minTilesForSilo": 300, "minCitiesForSilo": 3, "citiesPerSilo": 3, "maxSilos": 12, "citiesPerSam": 2,
                  "firstStrike": false, "leaderShare": 0.35, "mountainWeight": 1.0,
                  "nukeCooldown": 80, "cooldown": 40 },
-  // Neural decision layer. Every decision is recorded in <modelDir>/episodes; after each game both nets
-  // are retrained on all recorded games to predict the discounted future gain in position:
-  //   wLand*sqrt(land share) + wGold*log(1 + wealth/100k) + wTroops*troops/max + wCap*log(1 + maxTroops/100k)
-  // plus terminalWin / terminalLoss. horizon (ticks) is how far ahead it looks. prior is the head start
-  // the rule-based choice gets; it halves every priorHalfLife recorded decisions down to priorFloor.
-  // Each net is an ensemble of `ensemble` copies; moves the rules wouldn't make are marked down by
-  // caution * their disagreement. study=true keeps training in the background during the game, adding
-  // this game's own decisions studyHorizon ticks after they were made.
+  // Neural decision layer. The engine records every decision in <modelDir>/episodes; fw_trainer learns
+  // from those files while games run and publishes weights the engines pick up mid-game.
+  //   size: small (~70k weights) | medium (~200k) | large (~460k). Each size keeps its own weights.
+  //   ensemble: independent copies; a move the rules wouldn't make is marked down by caution * their
+  //   disagreement, and the rules' move gets `prior`, which halves every priorHalfLife decisions.
+  // What is learned, per decision: the discounted future gain in position,
+  //   wLand*sqrt(land share) + wGold*log(1 + wealth/100k) + wTroops*troops/max + wCap*log(1 + maxTroops/100k),
+  // looking `horizon` ticks ahead, plus terminalWin / terminalLoss and terminalShare * final land share.
+  // Scores are in units of that return's standard deviation.
   // Delete modelDir to start learning from scratch. enabled=false = pure rules.
-  "learning":  { "enabled": true, "modelDir": "models", "hidden": 128, "ensemble": 5, "caution": 0.5,
-                 "study": true, "studyHorizon": 300, "lr": 0.001, "batch": 64,
-                 "replay": 200000, "maxEpisodes": 400, "trainSteps": 3000, "horizon": 1500,
+  "learning":  { "enabled": true, "modelDir": "models", "size": "large", "ensemble": 5, "caution": 1.0,
+                 "weightDecay": 0.0001, "studyHorizon": 300, "lr": 0.0005, "batch": 64,
+                 "replay": 150000, "maxEpisodes": 400, "horizon": 1500,
                  "wLand": 10.0, "wGold": 1.0, "wTroops": 0.5, "wCap": 0.5,
-                 "terminalWin": 10.0, "terminalLoss": -10.0,
-                 "epsilon": 0.15, "epsilonDecay": 0.00005, "temperature": 0.3,
-                 "prior": 1.0, "priorHalfLife": 20000, "priorFloor": 0.1, "fullTroops": 0.9,
+                 "terminalWin": 10.0, "terminalLoss": -10.0, "terminalShare": 10.0,
+                 "epsilon": 0.15, "epsilonDecay": 0.00005, "temperature": 0.1,
+                 "prior": 0.3, "priorHalfLife": 20000, "priorFloor": 0.03, "fullTroops": 0.9,
                  "troopCooldown": 10, "goldCooldown": 20 }
 }

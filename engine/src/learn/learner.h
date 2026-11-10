@@ -1,56 +1,71 @@
 #pragma once
 
-#include <atomic>
-#include <cstdio>
-#include <deque>
-#include <mutex>
+#include <functional>
 #include <random>
-#include <thread>
 #include <string>
 #include <vector>
 
 #include <nlohmann/json.hpp>
 
 #include "config.h"
+#include "learn/episodes.h"
 #include "learn/mlp.h"
+#include "learn/model.h"
 #include "state.h"
 #include "strategy/planner.h"
 
 namespace fw {
 
-// One candidate decision: its network input and the action it turns into.
+// One candidate decision: its option features and the action it turns into.
 struct Option {
     std::string label;
-    std::vector<float> x;
+    std::vector<float> x;   // features of the option itself (the state is encoded separately)
+    int target = -1;        // index into Features::ents of the player it is aimed at
     nlohmann::json action;  // null for wait / save
-    double ratio = 0;       // fraction of our troops (troop options)
+    double ratio = 0;       // fraction of our troops (troop options); rule score (spawn options)
     double troops = 0;      // troops it commits
     double gold = 0;        // gold it spends
     bool rulePick = false;
     bool sane = false;      // troop options: a move that is fine to force when troops are full
+    bool reckless = false;  // never picked by exploration
 };
 
-struct TrainReport {
-    int episodes = 0;
-    size_t samples[3] = {0, 0, 0};
-    // Mean squared error on held-out episodes in units of the return's variance:
-    // 1.0 = no better than guessing the average, 0 = perfect. Negative = no hold-out set yet.
-    double valBefore[3] = {-1, -1, -1};
-    double valAfter[3] = {-1, -1, -1};
+// What the networks see of a state: our own features and one row per visible player.
+struct Features {
+    std::vector<float> self, ents;
+    int nEnts = 0;
+    std::vector<int> smalls;  // small ID of each row in ents
+    int index(int small) const;
 };
 
-// Value-based decision layer. Three ensembles of networks (troop moves, gold spending, spawn site) score
-// every allowed option; the best one is played, with a decaying bonus for what the rules would do, a
-// markdown where the ensemble members disagree, and some exploration.
-// Decisions go to an episode file; train() turns all episodes into (decision, discounted future gain)
-// samples and fits the networks to them. During a game a background thread keeps studying (startStudy).
+Dims learnerDims();
+nn::Shape modelShape(const LearningConfig& lc);
+
+// The weights: an ensemble of v4 models for troop and gold decisions and a small ensemble for the spawn
+// site, stored in <modelDir>/v4-<size>/. The trainer writes them, engines read them.
+struct Brain {
+    Brain(const LearningConfig& lc, const std::string& modelDir, uint32_t seed);
+    bool load();  // false (and unchanged) unless a complete, matching set is on disk
+    void save(const nlohmann::json& extra = nullptr) const;  // extra fields go into status.json
+
+    std::string dir;
+    std::vector<nn::Model> members;
+    std::vector<Mlp> spawn;
+    size_t seen = 0, spawnSeen = 0;  // decisions trained on; drives prior and exploration decay
+    double mean = 0, sd = 1;         // scale of the returns the models were trained on
+    double spawnMean = 0, spawnSd = 1;
+};
+
+// The playing side of the neural layer. Each decision tick it scores every allowed option with the
+// ensemble and plays the best, with a decaying bonus for what the rules would do, a markdown where the
+// members disagree, and some exploration. Decisions are written to episode files; fw_trainer learns
+// from them and publishes new weights, which are picked up while the game runs.
 class Learner {
 public:
     Learner(const Config& cfg, std::string modelDir, uint32_t seed = 7);
     ~Learner();
 
     void load();
-    void save() const;
 
     // Call once per state, before the phases.
     void observe(const State& s);
@@ -60,82 +75,44 @@ public:
     void troopPhase(Ctx& c);
     // End of game: closes the episode with its outcome.
     void gameOver(bool won, bool eliminated);
-    // Rebuilds the training set from the episode files and trains all nets.
-    TrainReport train(int steps);
-    // Background training while the game runs; train() and the destructor stop it.
-    void startStudy();
-    void stopStudy();
 
-    size_t samples(int net) const { return nets_[net].seen; }
     double priorWeight(int net) const;
-    int inputs(int net) const { return nets_[net].members[0].inputs(); }
+    int reloads() const { return reloads_; }
+    Brain& brain() { return brain_; }
+    // Extra score per option from outside the nets (research advice). Net: kTroop / kGold / kSpawn.
+    void setAdvice(std::function<double(int, const Option&)> fn) { advice_ = std::move(fn); }
 
     // Exposed for tests.
+    Features features(const State& s, bool overextended) const;
     std::vector<Option> troopOptions(const State& s, const Plan& plan, bool overextended) const;
     std::vector<Option> goldOptions(const State& s, const Plan& plan) const;
-    float score(int net, const Option& o) const;  // ensemble mean
-    void addSample(int net, std::vector<float> x, float y);
-    void trainSteps(int net, int steps);
-    // Position value of a snapshot {tiles, landTiles, troops, maxTroops, gold, wealth}.
-    double potential(const double snap[6]) const;
+    float score(int net, const Features& ft, const Option& o);  // ensemble mean
 
     static constexpr int kTroop = 0;
     static constexpr int kGold = 1;
     static constexpr int kSpawn = 2;
-    static constexpr int kNets = 3;
 
 private:
-    struct Sample {
-        std::vector<float> x;
-        float y;
-    };
-    struct Net {
-        std::vector<Mlp> members;  // the ensemble being trained
-        std::vector<Mlp> act;      // copies the decisions read (guarded by actMu_)
-        std::vector<Sample> data;  // training set (filled by train(), the study thread or addSample)
-        size_t seen = 0;           // decisions this net has been trained on; drives prior/epsilon decay
-        double mean = 0, sd = 1;   // scale of its targets
-    };
-    struct Trail {  // a decision of this game whose short-term result is still unfolding
-        int net, tick;
-        double phi;
-        std::vector<float> x;
-        bool done;
-    };
-    struct Live {  // ...and once it is known
-        int net;
-        std::vector<float> x;
-        double partial, discount, value;
-    };
-
-    void predict(int net, const std::vector<float>& x, double& mean, double& sd) const;
-    const Option& choose(int net, std::vector<Option>& opts);
-    void record(int net, const Option& pick, const State& s);
-    void closeEpisode();
-    int loadEpisodes(std::vector<Sample> train[kNets], std::vector<Sample> val[kNets], bool holdOut);
-    void trainMember(int net, int member, int steps, float lrStart, float lrEnd, uint32_t seed);
-    void publish(int net);
-    void studyLive(int net, const std::vector<float>& x, int tick, double phi);
-    void studyLoop();
+    void scoreAll(int net, const Features& ft, const std::vector<Option>& opts, std::vector<double>& mean,
+                  std::vector<double>& sd);
+    const Option& choose(int net, const Features& ft, std::vector<Option>& opts);
+    void record(int net, const Features& ft, const Option& pick, const State& s);
+    void snapshot(const State& s, double out[kSnap]) const;
+    void reloadIfNewer();
 
     const Config& cfg_;
     const LearningConfig& lc_;
     std::string dir_;
-    Net nets_[kNets];
+    Brain brain_;
+    EpisodeWriter writer_;
+    std::function<double(int, const Option&)> advice_;
     State lastState_;
     int lastTick_ = -1;
-    double lastBest_[kNets] = {0, 0, 0};  // value of the best option at each net's latest decision
-    double lastPick_ = 0;                 // ensemble mean of the option just chosen
-    std::FILE* episode_ = nullptr;
-    mutable std::mt19937 rng_;
-
-    mutable std::mutex actMu_;
-    std::mutex liveMu_;
-    std::vector<Live> live_;
-    std::deque<Trail> trail_;
-    std::thread study_;
-    std::atomic<bool> stop_{false};
-    bool studying_ = false;
+    double lastGold_ = -1, earned_ = 0, income_ = 0;  // gold earned so far, and per tick (smoothed)
+    double lastPick_ = 0, lastSpread_ = 0;            // ensemble mean / spread of the option just chosen
+    long long statusTime_ = 0;
+    int reloads_ = 0;
+    std::mt19937 rng_;
 };
 
 }  // namespace fw

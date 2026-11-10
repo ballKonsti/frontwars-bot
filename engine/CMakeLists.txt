@@ -24,6 +24,9 @@ add_library(fw_core
   src/strategy/diplomacy.cpp
   src/strategy/strategic.cpp
   src/learn/mlp.cpp
+  src/learn/model.cpp
+  src/learn/episodes.cpp
+  src/learn/trainer.cpp
   src/learn/learner.cpp)
 target_include_directories(fw_core PUBLIC src)
 find_package(Threads REQUIRED)
@@ -33,6 +36,8 @@ target_compile_options(fw_core PRIVATE -Wall -Wextra -O3 -march=native -ffast-ma
 
 add_executable(fw_engine src/main.cpp)
 target_link_libraries(fw_engine PRIVATE fw_core)
+add_executable(fw_trainer src/trainer_main.cpp)
+target_link_libraries(fw_trainer PRIVATE fw_core)
 
 find_package(GTest QUIET)
 if(GTest_FOUND)

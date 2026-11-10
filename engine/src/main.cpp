@@ -1,8 +1,7 @@
 // fw_engine: reads one game-state JSON per line on stdin, writes one {"actions":[...],"log":[...]} line per state.
 // A {"gameOver":true,"won":bool,"eliminated":bool} line ends the game for the learner (no reply).
-// When stdin closes, the networks are retrained on every recorded game and saved.
-//   fw_engine <config>                play
-//   fw_engine --train <config> [N]    only retrain (N minibatch steps) and print how well the nets fit
+// Learning happens in fw_trainer; this process only plays, records its decisions, and picks up new
+// weights while the game runs.
 #include <filesystem>
 #include <iostream>
 #include <memory>
@@ -13,31 +12,10 @@
 #include "state.h"
 #include "strategy/planner.h"
 
-namespace {
-
-void trainAndSave(fw::Learner& learner, int steps) {
-    fw::TrainReport r = learner.train(steps);
-    learner.save();
-    std::cerr << "learner: trained on " << r.episodes << " games, " << r.samples[0] << " troop / " << r.samples[1]
-              << " gold / " << r.samples[2] << " spawn decisions";
-    for (int net : {0, 1})
-        if (r.valAfter[net] >= 0)
-            std::cerr << "; " << (net ? "gold" : "troop") << " held-out error " << r.valBefore[net] << " -> "
-                      << r.valAfter[net] << " (1.0 = knows nothing)";
-    std::cerr << "\n";
-}
-
-}  // namespace
-
 int main(int argc, char** argv) {
     std::ios::sync_with_stdio(false);
     fw::Config cfg;
     std::filesystem::path configDir = ".";
-    bool trainOnly = argc > 1 && std::string(argv[1]) == "--train";
-    if (trainOnly) {
-        --argc;
-        ++argv;
-    }
     if (argc > 1) {
         configDir = std::filesystem::path(argv[1]).parent_path();
         try {
@@ -53,20 +31,10 @@ int main(int argc, char** argv) {
         if (dir.is_relative()) dir = configDir / dir;
         learner = std::make_unique<fw::Learner>(cfg, dir.string(), std::random_device{}());
         learner->load();
-        std::cerr << "learner: " << learner->samples(fw::Learner::kTroop) << " troop / "
-                  << learner->samples(fw::Learner::kGold) << " gold decisions of experience in " << dir.string()
-                  << "\n";
+        std::cerr << "learner: " << learner->brain().seen << " decisions of experience, "
+                  << learner->brain().members[0].parameters() << " weights x " << learner->brain().members.size()
+                  << " (" << cfg.learning.size << ") in " << learner->brain().dir << "\n";
     }
-    if (trainOnly) {
-        if (!learner) {
-            std::cerr << "learning is disabled in the config\n";
-            return 1;
-        }
-        trainAndSave(*learner, argc > 2 ? std::atoi(argv[2]) : 10 * cfg.learning.trainSteps);
-        return 0;
-    }
-
-    if (learner) learner->startStudy();
     fw::Memory mem;
     std::string line;
     while (std::getline(std::cin, line)) {
@@ -85,8 +53,6 @@ int main(int argc, char** argv) {
         }
         std::cout << out.dump() << '\n' << std::flush;
     }
-    if (learner && cfg.learning.record) {
-        trainAndSave(*learner, cfg.learning.trainSteps);
-    }
+    if (learner) std::cerr << "learner: picked up new weights " << learner->reloads() << " times during the game\n";
     return 0;
 }

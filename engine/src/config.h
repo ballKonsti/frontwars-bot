@@ -105,18 +105,18 @@ struct StrategicConfig {
 struct LearningConfig {
     bool enabled = true;
     std::string modelDir = "models";  // relative to the config file
-    int hidden = 128;               // troop/gold nets: inputs -> hidden -> hidden -> hidden/2 -> 1
+    // Network size: small (~25k weights), medium (~130k), large (~500k). Each size has its own weights.
+    std::string size = "large";
+    double weightDecay = 1e-4;
     int ensemble = 5;               // independent copies of each net; their disagreement = uncertainty
-    double caution = 0.5;           // moves the rules wouldn't make are marked down by this * disagreement
-    bool study = true;              // keep training in the background while the game runs
+    double caution = 1.0;           // moves the rules wouldn't make are marked down by this * disagreement
     bool record = true;             // write decisions to episode files and retrain after the game
     bool explore = true;            // false = always play the best-scored move (evaluation games)
-    int studyHorizon = 300;         // ticks until a decision of the running game is studied
-    double lr = 1e-3;
+    int studyHorizon = 300;         // ticks until the trainer studies a decision of a game still running
+    double lr = 5e-4;
     int batch = 64;
-    int replay = 200000;            // newest decisions (per net) used for training
+    int replay = 150000;            // newest decisions (per net) used for training
     int maxEpisodes = 400;          // older episode files are deleted
-    int trainSteps = 3000;          // minibatch steps after each game
     int horizon = 1500;             // discount horizon in ticks: gains this far ahead count 1/e
     // Position value: wLand*sqrt(land share) + wGold*log(1 + wealth/100k) + wTroops*troops/max
     // + wCap*log(1 + maxTroops/100k). Wealth = gold + what our structures cost.
@@ -126,12 +126,13 @@ struct LearningConfig {
     double wCap = 0.5;
     double terminalWin = 10.0;
     double terminalLoss = -10.0;
+    double terminalShare = 10.0;    // ...plus this * final land share, so lost games still differ
     double epsilon = 0.15;          // chance to sample a move by score instead of taking the best
     double epsilonDecay = 5e-5;     // eps = epsilon / (1 + samples * epsilonDecay)
-    double temperature = 0.3;       // softmax temperature of that sampling (scores are in std units)
-    double prior = 1.0;             // bonus for the rule-based choice while the nets are young
+    double temperature = 0.1;       // softmax temperature of that sampling (scores are in std units)
+    double prior = 0.3;             // bonus for the rule-based choice while the nets are young
     double priorHalfLife = 20000;   // samples until that bonus halves
-    double priorFloor = 0.1;        // ...but never below this: the rules stay the tie-breaker
+    double priorFloor = 0.03;       // ...but never below this: the rules stay the tie-breaker
     double fullTroops = 0.9;        // at this troop fill, waiting is not an option if a sane move exists
     int troopCooldown = 10;
     int goldCooldown = 20;
